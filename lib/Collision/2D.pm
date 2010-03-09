@@ -8,6 +8,7 @@ use Collision::2D::Entity;
 use Collision::2D::Entity::Point;
 use Collision::2D::Entity::Rect;
 use Collision::2D::Entity::Circle;
+use Collision::2D::Entity::Grid;
 
 BEGIN {
    require Exporter;
@@ -19,13 +20,14 @@ BEGIN {
       hash2circle obj2circle
       normalize_vec
    );
+     # hash2grid
    our %EXPORT_TAGS = (
       all => \@EXPORT_OK,
       #std => [qw( check_contains check_collision )],
    );
 }
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub dynamic_collision{
    my ($ent1, $ent2, %params) = @_;
@@ -35,12 +37,12 @@ sub dynamic_collision{
    # and return all collisions, starting with the closest
    if (ref $ent2 eq 'ARRAY'){
       my @collisions = map {dynamic_collision($ent1,$_,%params)} @$ent2;
-      return sort{$a<=>$b} grep{defined$_} @collisions;
+      return sort{$a->time <=> $b->time} grep{defined$_} @collisions;
    }
    
    #now, we sort by package name. This is so we can find specific routine in predictable namespace.
    #for example, p comes before r, so point-rect collisions are at $point->collide_rect
-   ($ent1, $ent2) = sort { "$a" cmp "$b" } ($ent1, $ent2);
+   ($ent1, $ent2) =  ($ent2, $ent1)  if  ("$ent1" gt "$ent2" );
    my $method = "collide_$ent2";
    
    $ent1->normalize($ent2);
@@ -119,11 +121,30 @@ sub obj2circle{
    
 }
 
+sub hash2grid{
+   my $hash = shift;
+   my ($cell_size, $w, $h, $x, $y, $cells, $cells_x, $cells_y) = @{$hash}{qw/cell_size w h x y cells cells_x cells_y/};
+   #if (no x or y) {
+      # do what? do + dimensions even need to be constrained?
+      # should x and y be derivable from specified number of $cells?
+   #}
+   die 'inadequate dimension info' unless $cell_size and $w and $h;
+   
+   return Collision::2D::Entity::Grid->new (
+      x=>$x,
+      y=>$y,
+      w=>$w,
+      h=>$h,
+      cell_size => $cell_size,
+   );
+}
+
+
 q|positively|
 __END__
 =head1 NAME
 
-Collision::2D - A selection of dynamic collision detection routines
+Collision::2D - A selection of continuous collision detection routines
 
 =head1 SYNOPSIS
 
@@ -150,7 +171,7 @@ Collision::2D - A selection of dynamic collision detection routines
 
 =head1 DESCRIPTION
 
-Collision::2D contains sets of several geometrical classes to help you model dynamic
+Collision::2D contains sets of several geometrical classes to help you model dynamic (continuous)
 collisions in your programs. It is targeted for any game or other application that requires
 dynamic collision detection between moving circles, rectangles, and points.
 
@@ -237,9 +258,11 @@ define function names or use the :all tag.
  **maybe entities should be linked to whatever entities they stand/walk on?
  **How should entities fit into 'gaps' in the floor that are their exact size?
 
-=head1 AUTHOR
+=head1 CONTRIBUTORS
 
 Zach P. Morgan, C<< <zpmorgan at cpan.org> >>
+
+Stefan Petrea C<< <stefan.petrea@gmail.com> >>
 
 
 =head1 ACKNOWLEDGEMENTS
@@ -247,9 +270,7 @@ Zach P. Morgan, C<< <zpmorgan at cpan.org> >>
 Many thanks to Breno G. de Oliveira and Kartik Thakore for their help and insights.
 
 
-=head1 LICENSE AND COPYRIGHT
-
-Copyright 2010 Zach P. Morgan
+=head1 LICENSE
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published

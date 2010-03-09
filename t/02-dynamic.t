@@ -4,7 +4,8 @@ use warnings;
 
 use Collision::2D ':all';
 
-use Test::More tests => 97;
+use Test::More tests => 99;
+use Test::Number::Delta;
 
 #First do rect-point collisions. the method is $point->collide_rect($rect,...)
 {
@@ -55,8 +56,16 @@ use Test::More tests => 97;
    my $strange_collision = dynamic_collision ($accurate_bullet, $tiny_rect, interval=>400);
    ok($strange_collision, 'small object at long distance');
    #is ($strange_collision->axis, 'y');
-   ok (99.99 < $strange_collision->time, 'time ~ 100');
-   ok ($strange_collision->time < 100.01, 'time ~ 100');
+   delta_ok ($strange_collision->time, 100, 'time ~ 100');
+   
+   
+   my $widerect = hash2rect {x=>-100, w=>200, y=>0, h=>1};
+   #point from above, moving right. hit at y=1.
+   my $ny_pt = hash2point {x=>6,y=>2, xv=>.21212, yv=>-1};
+   my $ny_collision = dynamic_collision ($ny_pt, $widerect, interval=>20);
+   ok ($ny_collision, 'some now-passing point-rect test');
+   is ($ny_collision->time, 1, 'time for now-passing point-rect test');
+   
 }
 
 #now circle-point collisions. The method is $circle->collide_point($point,...)
@@ -112,8 +121,8 @@ use Test::More tests => 97;
    is ($rv_collision->time, 2);
    ok ($collision->axis->[0] < 0);
    ok ($rv_collision->axis->[0] > 0);
-   ok ($collision->axis->[1] == 0);
-   ok ($rv_collision->axis->[1] == 0);
+   is ($collision->axis->[1], 0);
+   is ($rv_collision->axis->[1], 0);
    
    #again, barely hit pie, and then barely stop short. from upper left.
    my $collisionX = dynamic_collision ($unitpie, hash2circle({ x=>-10, y=>10, xv=>1, yv=>-1}), interval=>10-sqrt(1.99));
@@ -136,22 +145,22 @@ use Test::More tests => 97;
    
    # top directly
    my $ball2 = hash2circle {x=>0, y=>5.5, yv=>-16, radius=>.5};
-   $collision = dynamic_collision ($ball2, $unit_toast, interval=>100);
-   ok($collision);
-   is ($collision->time, 1/4);
-   is ($collision->axis, 'y', 'vertical collision');
+   my $collision2 = dynamic_collision ($ball2, $unit_toast, interval=>100);
+   ok($collision2);
+   is ($collision2->time, 1/4);
+   is ($collision2->axis, 'y', 'vertical collision');
    # right directly
    my $ball3 = hash2circle {x=>5.5, y=>0, xv=>-16, radius=>.5};
-   $collision = dynamic_collision ($ball3, $unit_toast, interval=>100);
-   ok($collision);
-   is ($collision->time, 1/4);
-   is ($collision->axis, 'x', 'h collision');
+   my $collision3 = dynamic_collision ($ball3, $unit_toast, interval=>100);
+   ok($collision3);
+   is ($collision3->time, 1/4);
+   is ($collision3->axis, 'x', 'h collision');
    # bottom directly
    my $ball4 = hash2circle {x=>0, y=>-5.5, yv=>16, radius=>.5};
-   $collision = dynamic_collision ($ball4, $unit_toast, interval=>100);
-   ok($collision);
-   is ($collision->time, 1/4);
-   is ($collision->axis, 'y', 'vertical collision');
+   my $collision4 = dynamic_collision ($ball4, $unit_toast, interval=>100);
+   ok($collision4);
+   is ($collision4->time, 1/4);
+   is ($collision4->axis, 'y', 'vertical collision');
 }
    #those didn't test the corners of the square with diagonal parts of the circle. these do:
 {
@@ -159,23 +168,24 @@ use Test::More tests => 97;
    my $money = hash2rect {x=> (sqrt(2)/2 + 3), y=> (sqrt(2)/2 + 3),   xv=>-1, yv=>-1, w=>2, h=>2};
    my $collision = dynamic_collision ($unitpie, $money, interval=>3.01);
    ok ($collision, 'rect (0,0) point collides with circle');
-   is ($collision->time, 3, 'at right time');
-   is_deeply (normalize_vec($collision->axis), [-sqrt(2)/2, -sqrt(2)/2],  'collision vector ok');
+   delta_ok ($collision->time, 3, 'at right time');
+   delta_ok (normalize_vec($collision->axis)->[0], -sqrt(2)/2,  'collision vector x ok');
+   delta_ok (normalize_vec($collision->axis)->[1], -sqrt(2)/2,  'collision vector y ok');
    
    my $rect2 = hash2rect {x=> -(sqrt(2)/2 + 3), y=> -(sqrt(2)/2 + 3),   xv=>1, yv=>1, w=>2, h=>2};
    $collision = dynamic_collision ($unitpie, $rect2, interval=>1.01);
    ok ($collision, 'rect (2,2) point collides with circle');
-   is ($collision->time, 1, 'at right time');
+   delta_ok ($collision->time, 1, 'at right time');
    
    my $rect3 = hash2rect {x=> (sqrt(2)/2 + 1), y=> -(sqrt(2)/2 + 3),   xv=>-1, yv=>1, w=>2, h=>2};
    $collision = dynamic_collision ($unitpie, $rect3, interval=>2);
    ok ($collision, 'rect (2,0) point (lower-right) collides with circle');
-   is ($collision->time, 1, 'at right time');
+   delta_ok ($collision->time, 1, 'at right time');
    
    my $rect4 = hash2rect {x=> -(sqrt(2)/2 + 3), y=> (sqrt(2)/2 + 1),   xv=>1, yv=>-1, w=>2, h=>2};
    $collision = dynamic_collision ($unitpie, $rect3, interval=>2);
    ok ($collision, 'rect (0,2) point (upper left-right) collides with circle');
-   is ($collision->time, 1, 'at right time');
+   delta_ok ($collision->time, 1, 'at right time');
 }
 
 { #null collisions anyone?

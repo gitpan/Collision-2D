@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               Collision-2D
-version:            0.02
-abstract:           A selection of dynamic collision detection routines
+version:            0.03
+abstract:           A selection of continuous collision detection routines
 author:
     - Zach Morgan <zpmorgan@cpan.org>
 license:            perl
@@ -11,8 +11,10 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Mouse:       0
-    Test::More:  0
+    List::AllUtils:       0
+    Mouse:                0
+    Test::More:           0
+    Test::Number::Delta:  0
 no_index:
     directory:
         - t

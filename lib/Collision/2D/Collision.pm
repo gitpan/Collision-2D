@@ -23,15 +23,64 @@ has 'ent2' => (
    is => 'ro',
 );
 
+sub maxis{
+   my $self = shift;
+   my $axis = $self->axis;
+   return unless $axis;
+   return $axis if ref $axis eq 'ARRAY';
+   if ($axis eq 'x'){
+      if ($self->ent1->relative_xv > 0){
+         return [1,0];
+      }
+      return [-1,0];
+   }
+   #$axis eq 'y'
+   if ($self->ent1->relative_yv > 0){
+      return [0,1];
+   }
+   return [0,-1];
+}
+
 sub does_mario_defeat_goomba{}
 
-sub bounce_vector{
+#unless 'elasticity' is a param, assume it's totally elastic
+#This just adds a negatively scaled axis of collision
+# to the relative velocity
+#  (The scalar depends on elasticity and some trig.)
+# If 'relative' is param, return that.
+# Else use it & ent2 to find the resulting absolute velocity.
+
+#Also, for now we assume that ent2 has infinite mass.
+use Math::Trig qw/acos/;
+
+sub bounce_vector{ 
+   my ($self,%params) = @_;
+   my $elasticity = $params{elasticity} // 1;
+   my $axis = $self->maxis;
    
-}
-sub remaining_interval{
+   my $axis_len = sqrt($axis->[0]**2 + $axis->[1]**2);
+   my $rxv = $self->ent1->relative_xv;
+   my $ryv = $self->ent1->relative_yv;
+   my $rv_len = sqrt($rxv**2 + $ryv**2);
+   my $dot = $rxv*$axis->[0] + $ryv*$axis->[1];
+   my $angle = acos($dot / ($axis_len * $rv_len));
    
+   my $axis_scalar = $rv_len * cos($angle) / $axis_len;
+   $axis_scalar *= -1 * (1+$elasticity);
+   
+   my $r_bounce_xv = $rxv + ($axis_scalar * $axis->[0]);
+   my $r_bounce_yv = $ryv + ($axis_scalar * $axis->[1]);
+   
+   if ($params{relative}){
+      return [$r_bounce_xv, $r_bounce_yv]
+   }
+   
+   return [$r_bounce_xv + $self->ent2->xv, $r_bounce_yv + $self->ent2->yv]
 }
 
+
+no Mouse;
+__PACKAGE__->meta->make_immutable;
 1
 
 __END__
@@ -47,7 +96,7 @@ Collision::2D::Collision - An object representing a collision betwixt 2 entities
 
 =item time
 
-The time of collision. For example, cinsider a point-circle collision,
+The time of collision. For example, consider a point-circle collision,
 where the point is moving towards the circle. 
 $collision->time is the B<exact> moment of collision between the two.
 
@@ -59,6 +108,15 @@ It depends entirely on how they collide.
 If the collision involves a vertical or horizontal line, the axis will be
 'x' or 'y'. If it's between a point or corner and a circle, it will be
 an arrayref, of the form [$x,$y].
+
+This vector will not be normal (normal means of length 1).
+L<Collision::2D::normalize_vec($v)|Collision::2D/normalize_vec>
+is provided for that purpose.
+
+=item maxis
+
+Again, the axis of collision. If you call this, it will always return the mathematical
+form [$x,$y]. If the axis existed as 'x' or 'y', it is translated to [$x,$y].
 
 This vector will not be normal (normal means of length 1).
 L<Collision::2D::normalize_vec($v)|Collision::2D/normalize_vec>

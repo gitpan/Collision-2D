@@ -1,5 +1,6 @@
 package Collision::2D::Entity::Circle;
 use Mouse;
+use Collision::2D::Entity::Rect;
 extends 'Collision::2D::Entity';
 
 use overload '""'  => sub{'circle'};
@@ -14,16 +15,24 @@ has 'radius' => (
 
 
 
+
+# formulas are the same as before with small modifs
 sub intersects_circle{
    my ($self, $other) = @_;
-   return 1 if  ($self->radius + $other->radius)
-      > sqrt(($self->x - $other->x)**2 + ($self->y - $other->y)**2);
-   return 0;
+
+   #sqrt is more expensive than square
+   return  ($self->radius + $other->radius)**2 > 
+		   ($self->x - $other->x)**2 + 
+		   ($self->y - $other->y)**2;
 }
+
+
 sub intersects_point{
    my ($self, $point) = @_;
-   return 1 if sqrt(($self->x - $point->x)**2 + ($self->y - $point->y)**2) < $self->radius;
-   return 0;
+
+   return   $self->radius**2 >
+		   ($self->x - $point->x)**2 + 
+		   ($self->y - $point->y)**2;
 }
 
 
@@ -108,19 +117,19 @@ sub collide_rect{
    # now look for collisions between a side of the circle
    #  and a side of the rect
    my @circ_points; #these are relative coordinates to rect
-   if ($x1+$w+$r < 0  and  $x2+$w+$r > 0){
+   if ($x1+$w < -$r  and  $x2+$w > -$r){
       #add circle's left point
       push @circ_points, [-$x1-$r,-$y1];
    }
-   if ($x1+$r > 0  and  $x2+$r < 0){
+   if ($x1 > $r  and  $x2 < $r){
       #add circle's right point
       push @circ_points, [-$x1+$r,-$y1];
    }
-   if ($y1+$h+$r < 0  and  $y2+$h+$r > 0){
+   if ($y1+$h < -$r  and  $y2+$h > -$r ){
       #add circle's bottom point
       push @circ_points, [-$x1,-$y1-$r];
    }
-   if ($y1+$r > 0  and  $y2+$r < 0){
+   if ($y1 > $r  and  $y2 < $r){
       #add circle's top point
       push @circ_points, [-$x1,-$y1+$r];
    }   #   warn @{$circ_points[0]};
@@ -219,8 +228,7 @@ sub collide_point{
    my $axis = [-$x_at_t, -$y_at_t]; #vector from self to point
    
    my $collision = Collision::2D::Collision->new(
-      time => $time,
-      axis => $axis,
+      time => $time, axis => $axis,
       ent1 => $self,
       ent2 => $point,
    );
@@ -236,24 +244,111 @@ sub collide_circle{
       relative_xv => $self->relative_xv,
       relative_yv => $self->relative_yv,
       radius => $self->radius + $other->radius,
-      y=>0,x=>0, #these will not be used, as we're doing all relative calculations
+      #y=>0,x=>0, #these will not be used, as we're doing all relative calculations
    );
    
    my $pt = Collision::2D::Entity::Point->new(
-      y=>44,x=>44, #these willn't be used, as we're doing all relative calculations
+      #y=>44,x=>44, #these willn't be used, as we're doing all relative calculations
    );
    my $collision = $double_trouble->collide_point($pt, %params);
    return unless $collision;
+   
    return Collision::2D::Collision->new(
       ent1 => $self,
       ent2 => $other,
       time => $collision->time,
       axis => $collision->axis,
+      #axis => [-$collision->axis->[0], -$collision->axis->[1]],
    );
 }
 
 
-3
+=for comment collide_grid(Collision::2D::Entity::Grid)
+
+Returns earliest collision with some entity on the grid.
+
+=cut
+
+
+sub collide_grid {
+	my ($self,$g) = @_;
+
+	my (@collisions);
+
+	my $r = $self->radius;
+
+
+	my $table = $g->table;
+	my $s     = $g->cell_size;
+
+	for my $x ( (-$r + $self->x) .. ($r + $self->x) ) {
+		for my $y ( (-$r + $self->y) .. ($r + $self->y) ) {
+			my $x1 = $x - $self->x;
+			my $y1 = $y - $self->y;
+			next if ($x1**2) + ($y1**2) > $r**2;
+
+			if($table->[$y/$s]->[$x/$s]) {
+				# we have something in the grid cell
+				
+				for my $entity_inside_cell ( @{$table->[$y/$s]->[$x/$s]} ) {
+					push @collisions,$self->collide_rect( $entity_inside_cell );
+				};
+
+			}
+
+		}
+	};
+
+
+	return 
+	(
+		sort { $a->time < $b->time }
+		@collisions
+	)[0]; # the earliest collision
+}
+
+
+=for comment write_to_grid()
+
+Pushes the circle into the cells of the grid which cover it.
+
+=cut
+
+sub write_to_grid {
+	my ($self, $grid) = @_;
+
+	#must find a faster way to find points inside
+	
+	my $r = $self->radius;
+	my $s = $grid->cell_size;
+	for my $x ( (-$r + $self->x) .. ($r + $self->x) ) {
+		for my $y ( (-$r + $self->y) .. ($r + $self->y) ) {
+			my $x1 = $x - $self->x;
+			my $y1 = $y - $self->y;
+			next if ($x1**2) + ($y1**2) > $r**2;
+			# printf("%d,%d,%d\n",$x1**2,$y1**2,$r**2);
+			#
+			# should actually insert $self in that cell, but for debug, we see if it fills correctly
+			#
+			# these divisions can be avoided
+
+			push	@{$grid->table->[$y/$s][$x/$s]}, 
+			    	 $self;
+		}
+	}
+}
+
+
+sub remove_from_grid {
+	#to be implemented
+}
+
+
+
+no Mouse;
+__PACKAGE__->meta->make_immutable;
+
+1
 
 __END__
 =head1 NAME

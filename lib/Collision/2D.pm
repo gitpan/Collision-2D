@@ -8,7 +8,6 @@ use Collision::2D::Entity;
 use Collision::2D::Entity::Point;
 use Collision::2D::Entity::Rect;
 use Collision::2D::Entity::Circle;
-use Collision::2D::Entity::Grid;
 
 BEGIN {
    require Exporter;
@@ -27,7 +26,7 @@ BEGIN {
    );
 }
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 sub dynamic_collision{
    my ($ent1, $ent2, %params) = @_;

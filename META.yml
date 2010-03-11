@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Collision-2D
-version:            0.03
+version:            0.04
 abstract:           A selection of continuous collision detection routines
 author:
     - Zach Morgan <zpmorgan@cpan.org>

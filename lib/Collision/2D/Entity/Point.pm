@@ -1,20 +1,39 @@
 package Collision::2D::Entity::Point;
-use Mouse;
-extends 'Collision::2D::Entity';
+use strict;
+use warnings;
 
+require DynaLoader;
+our @ISA = qw(DynaLoader Collision::2D::Entity);
+bootstrap Collision::2D::Entity::Point;
+
+
+sub _p{3} #meh priority
 use overload '""'  => sub{'point'};
 
-
+sub new{
+   my ($package, %params) = @_;
+   my $self = __PACKAGE__->_new (
+      $params{x} || 0,
+      $params{y} || 0,
+      $params{xv} || 0,
+      $params{yv} || 0,
+      $params{relative_x} || 0,
+      $params{relative_y} || 0,
+      $params{relative_xv} || 0,
+      $params{relative_yv} || 0,
+   );
+   return $self;
+}
 
 #I daresay, 2 points mayn't collide
-sub collide_point{
+sub _collide_point{
    return;
 }
 
 
 #Here, $self is assumed to be normalized.
 
-sub collide_rect{
+sub _collide_rect{
    my ($self, $rect, %params) = @_;
    #if we start inside rect, return the null collision, so to speak.
    #if ($rect->contains_point($self)){
@@ -72,7 +91,6 @@ sub collide_rect{
    
    #not that simple. either it enters rect, or passes by a corner. check each rect line segment.
    my ($best_time, $best_axis);
-   
    if ($self->relative_xv){
       if ($x1 < 0 and $x2 > 0){ # horizontally pass rect's left side
          my $t = (-$x1) / $self->relative_xv;
@@ -122,7 +140,39 @@ sub collide_rect{
    );
 }
 
-no Mouse;
-__PACKAGE__->meta->make_immutable;
-
 2
+
+__END__
+=head1 NAME
+
+Collision::2D::Entity::Rect - A rectangle entity.
+
+=head1 DESCRIPTION
+
+This is a point entity.
+Attributes (x, y) are the location of this point. See L<Collision::2D::Entity>.
+
+Points can not collide with other points. Use a very small circle instead.
+
+=head1 ATTRIBUTES
+
+Anything in L<Collision::2D::Entity>.
+
+=head1 METHODS
+
+Anything in L<Collision::2D::Entity>.
+
+=head2 collide
+
+See L<Collision::2D::Entity->collide($v)|Collision::2D::Entity/collide>
+
+ print 'boom' if $point->collide($rect);
+ print 'zing' if $point->collide($circle);
+ print 'yotz' if $point->collide($grid);
+ 
+=head2 intersect
+
+See L<Collision::2D::Entity->intersect($v)|Collision::2D::Entity/intersect>
+
+ print 'bam' if $point->intersect($rect);
+ # etc..

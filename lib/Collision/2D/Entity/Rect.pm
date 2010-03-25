@@ -1,37 +1,46 @@
 package Collision::2D::Entity::Rect;
-use Mouse;
-extends 'Collision::2D::Entity';
+use strict;
+use warnings;
 
+require DynaLoader;
+our @ISA = qw(DynaLoader Collision::2D::Entity);
+bootstrap Collision::2D::Entity::Rect;
+
+sub _p{4} #low priority
 use overload '""'  => sub{'rect'};
 
-has 'w' => (
-   isa => 'Num',
-   is => 'ro',
-   required => 1,
-   default=>1,
-);
-has 'h' => (
-   isa => 'Num',
-   is => 'ro',
-   required => 1,
-   default=>1,
-);
-
-sub intersects_rect{
-   return ($_[0]->x <= $_[1]->x) 
-            && ($_[0]->y <= $_[1]->y) 
-            && ($_[0]->x + $_[0]->w >= $_[1]->x + $_[1]->w) 
-            && ($_[0]->y + $_[0]->h >= $_[1]->y + $_[1]->h) 
-            && ($_[0]->x + $_[0]->w > $_[1]->x) 
-            && ($_[0]->y + $_[0]->h > $_[1]->y);
+sub new{
+   my ($package, %params) = @_;
+   my $self = __PACKAGE__->_new (
+      @params{qw/x y/},
+      $params{xv} || 0,
+      $params{yv} || 0,
+      $params{relative_x} || 0,
+      $params{relative_y} || 0,
+      $params{relative_xv} || 0,
+      $params{relative_yv} || 0,
+      @params{qw/w h/},
+   );
+   return $self;
 }
 
-sub collide_rect{
+sub intersect_rect{
+   my ($self, $other) = @_;
+   return (
+               ($self->x < $other->x + $other->w) 
+            && ($self->y < $other->y + $other->h) 
+            && ($self->x + $self->w > $other->x) 
+            && ($self->y + $self->h > $other->y));
+}
+
+sub _collide_rect{
    my ($self, $other, %params) = @_;
+   my $xv = $self->relative_xv;
+   my $yv = $self->relative_yv;
    my $x1 = $self->relative_x;
-   my $x2 = $x1 + ($self->relative_xv * $params{interval});
    my $y1 = $self->relative_y;
-   my $y2 = $y1 + ($self->relative_yv * $params{interval});
+   my $x2 = $x1 + ($xv * $params{interval});
+   my $y2 = $y1 + ($yv * $params{interval});
    my $sw = $self->w;
    my $sh = $self->h;
    my $ow = $other->w;
@@ -50,68 +59,57 @@ sub collide_rect{
             or $y1+$sh < 0 and $y2+$sh < 0
             or $y1 > $oh and $y2 > $oh
    );
+   my $best_time = $params{interval}+1;
+   my $best_axis;
    
-   my @collisions;
-   #with 3 closest points on $this, see if they enter $other
-   #and vice versa. pick closest of all detected collisions.
-   my @own_pts = (
-      {x=>$x1,    y=>$y1},
-      {x=>$x1+$sw, y=>$y1},
-      {x=>$x1+$sw, y=>$y1+$sh},
-      {x=>$x1,    y=>$y1+$sh},
-   );
-   for (@own_pts){ #calc initial distance from center of circle
-      $_->{dist} = sqrt($_->{x}**2 + $_->{y}**2);
+   if ($x1+$sw < 0){ #hit on left of $other
+      my $time = -($x1+$sw)/$xv;
+      my $yatt = $y1+$yv*$time;
+      if ($yatt + $sh > 0 and $yatt < $oh){
+         $best_time = $time;
+         $best_axis = 'x';
+      }
    }
-   @own_pts = sort {$a->{dist} <=> $b->{dist}} @own_pts;
-   for (@own_pts[0,1,2]){ #do this for 3 initially closest rect corners
-      my $r_pt = Collision::2D::Entity::Point->new(
-         relative_x =>  $_->{x},
-         relative_y =>  $_->{y},
-         relative_xv => $self->relative_xv,
-         relative_yv => $self->relative_yv,
-      );
-      my $collision = $r_pt->collide_rect ($other, interval=>$params{interval});
-      next unless $collision;
-      push @collisions, Collision::2D::Collision->new(
-         axis => $collision->axis,
-         time => $collision->time,
+   if ($y1+$sh < 0){ #hit on bottom of $other
+      my $time = -($y1+$sh)/$yv;
+      if ($time<$best_time){
+         my $xatt = $x1+$xv*$time;
+         if ($xatt + $sw > 0 and $xatt < $ow){
+            $best_time = $time;
+            $best_axis = 'y';
+         }
+      }
+   }
+   if ($x1 > $ow){ #hit on right of $other
+      my $time = -($x1 - $ow)/$xv;
+      if ($time<$best_time){
+         my $yatt = $y1+$yv*$time;
+         if ($yatt + $sh > 0 and $yatt < $oh){
+            $best_time = $time;
+            $best_axis = 'x';
+         }
+      }
+   }
+   if ($y1 > $oh){ #hit on right of $top
+      my $time = -($y1 - $oh)/$yv;
+      if ($time<$best_time){
+         my $xatt = $x1+$xv*$time;
+         if ($xatt + $sw > 0 and $xatt < $ow){
+            $best_time = $time;
+            $best_axis = 'y';
+         }
+      }
+   }
+   
+   if ($best_time <= $params{interval}){
+      return Collision::2D::Collision->new(
+         axis => $best_axis,
+         time => $best_time,
          ent1 => $self,
          ent2 => $other,
       );
    }
-   
-   #now do the exact same for the other
-   my @other_pts = (
-      {x=>-$x1,    y=>-$y1},
-      {x=>-$x1-$ow, y=>-$y1},
-      {x=>-$x1-$ow, y=>-$y1-$oh},
-      {x=>-$x1,    y=>-$y1-$oh},
-   );
-   for (@other_pts){ #calc initial distance from center of circle
-      $_->{dist} = sqrt($_->{x}**2 + $_->{y}**2);
-   }
-   @other_pts = sort {$a->{dist} <=> $b->{dist}} @other_pts;
-   for (@other_pts[0,1,2]){ #do this for 3 initially closest rect corners
-      my $r_pt = Collision::2D::Entity::Point->new(
-         relative_x =>  $_->{x},
-         relative_y =>  $_->{y},
-         relative_xv => -$self->relative_xv,
-         relative_yv => -$self->relative_yv,
-      );
-      my $collision = $r_pt->collide_rect ($self, interval=>$params{interval});
-      next unless $collision;
-      push @collisions, Collision::2D::Collision->new(
-         axis => $collision->axis,
-         time => $collision->time,
-         ent1 => $other,
-         ent2 => $self,
-      );
-   }
-   return unless @collisions;
-   @collisions = sort {$a->time <=> $b->time} @collisions;
-   #warn join ',', @collisions;
-   return $collisions[0]
+   return;
 }
 
 sub contains_point{
@@ -122,7 +120,42 @@ sub contains_point{
       and  $point->y < $self->y + $self->h);
 }
 
-no Mouse;
-__PACKAGE__->meta->make_immutable;
-
 3
+
+__END__
+=head1 NAME
+
+Collision::2D::Entity::Rect - A rectangle entity.
+
+=head1 DESCRIPTION
+
+This is an entity with height and width.
+Attributes (x, y) is one corner of the rect, whereas (x+w,y+h)
+is the opposite corner.
+
+=head1 ATTRIBUTES
+
+=head2 w, h
+
+Width and height of the rectangle.
+
+=head1 METHODS
+
+Anything in L<Collision::2D::Entity>.
+
+=head2 collide
+
+See L<Collision::2D::Entity->collide($v)|Collision::2D::Entity/collide>
+
+ print 'boom' if $rect->collide($rect);
+ print 'zing' if $rect->collide($circle);
+ print 'yotz' if $rect->collide($grid);
+ 
+=head2 intersect
+
+See L<Collision::2D::Entity->intersect($v)|Collision::2D::Entity/intersect>
+
+ print 'bam' if $rect->intersect($rect);
+ # etc..
+
+

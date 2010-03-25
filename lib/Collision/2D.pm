@@ -8,25 +8,27 @@ use Collision::2D::Entity;
 use Collision::2D::Entity::Point;
 use Collision::2D::Entity::Rect;
 use Collision::2D::Entity::Circle;
+use Collision::2D::Entity::Grid;
 
 BEGIN {
    require Exporter;
    our @ISA = qw(Exporter);
    our @EXPORT_OK = qw( 
       dynamic_collision
+      intersection
       hash2point hash2rect
       obj2point  obj2rect
       hash2circle obj2circle
       normalize_vec
+      hash2grid
    );
-     # hash2grid
    our %EXPORT_TAGS = (
       all => \@EXPORT_OK,
       #std => [qw( check_contains check_collision )],
    );
 }
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 sub dynamic_collision{
    my ($ent1, $ent2, %params) = @_;
@@ -40,14 +42,37 @@ sub dynamic_collision{
    }
    
    #now, we sort by package name. This is so we can find specific routine in predictable namespace.
-   #for example, p comes before r, so point-rect collisions are at $point->collide_rect
-   ($ent1, $ent2) =  ($ent2, $ent1)  if  ("$ent1" gt "$ent2" );
-   my $method = "collide_$ent2";
+   #for example, p comes before r, so point-rect collisions are at $point->_collide_rect
+   my $swapped;
+   if  ($ent1->_p > $ent2->_p ){
+      ($ent1, $ent2) =  ($ent2, $ent1);
+      $swapped=1
+   }
+   my $method = "_collide_$ent2";
    
    $ent1->normalize($ent2);
    my $collision = $ent1->$method($ent2, %params);
-   
+   return unless $collision;
+   if ($params{keep_order} and $swapped){
+      #original ent1 needs to be ent1 in collision
+      return $collision->invert;
+   }
    return $collision;
+}
+
+sub intersection{
+   my ($ent1, $ent2) = @_;
+   if (ref $ent2 eq 'ARRAY'){
+      for (@$ent2){
+         return 1 if intersection($ent1, $_);
+      }
+      return 0;
+   }
+   ($ent1, $ent2) =  ($ent2, $ent1)  if  ($ent1->_p > $ent2->_p );
+   my $method = "intersect_$ent2";
+   
+   return 1 if $ent1->$method($ent2);
+   return 0;
 }
 
 sub normalize_vec{
@@ -61,8 +86,8 @@ sub hash2point{
    return Collision::2D::Entity::Point->new (
       x=>$hash->{x},
       y=>$hash->{y},
-      xv=>$hash->{xv} || 0,
-      yv=>$hash->{yv} || 0,
+      xv=>$hash->{xv},
+      yv=>$hash->{yv},
    );
 }
 sub hash2rect{
@@ -70,8 +95,8 @@ sub hash2rect{
    return Collision::2D::Entity::Rect->new (
       x=>$hash->{x},
       y=>$hash->{y},
-      xv=>$hash->{xv} || 0,
-      yv=>$hash->{yv} || 0,
+      xv=>$hash->{xv},
+      yv=>$hash->{yv},
       h=>$hash->{h} || 1,
       w=>$hash->{w} || 1,
    )
@@ -81,8 +106,8 @@ sub obj2point{
    return Collision::2D::Entity::Point->new (
       x=>$obj->x,
       y=>$obj->y,
-      xv=>$obj->xv || 0,
-      yv=>$obj->yv || 0,
+      xv=>$obj->xv,
+      yv=>$obj->yv,
    )
 }
 sub obj2rect{
@@ -90,8 +115,8 @@ sub obj2rect{
    return Collision::2D::Entity::Rect->new (
       x=>$obj->x,
       y=>$obj->y,
-      xv=>$obj->xv || 0,
-      yv=>$obj->yv || 0,
+      xv=>$obj->xv,
+      yv=>$obj->yv,
       h=>$obj->h || 1,
       w=>$obj->w || 1,
    )
@@ -102,9 +127,9 @@ sub hash2circle{
    return Collision::2D::Entity::Circle->new (
       x=>$hash->{x},
       y=>$hash->{y},
-      xv=>$hash->{xv} || 0,
-      yv=>$hash->{yv} || 0,
-      radius => $hash->{radius} || 1,
+      xv=>$hash->{xv},
+      yv=>$hash->{yv},
+      radius => $hash->{radius} || $hash->{r} || 1,
    )
 }
 
@@ -113,21 +138,39 @@ sub obj2circle{
    return Collision::2D::Entity::Circle->new (
       x=>$obj->x,
       y=>$obj->y,
-      xv=>$obj->xv || 0,
-      yv=>$obj->yv || 0,
+      xv=>$obj->xv,
+      yv=>$obj->yv,
       radius => $obj->radius || 1,
    )
    
 }
 
+# x and y are be derivable from specified number of $cells?
+#w < cell_size * cells_w
+#cells_w > cell_size / w
+#cells: both cells_x and cells_y. this means that you want this grid to be square.
+
+# do what? do + dimensions even need to be constrained?
 sub hash2grid{
    my $hash = shift;
-   my ($cell_size, $w, $h, $x, $y, $cells, $cells_x, $cells_y) = @{$hash}{qw/cell_size w h x y cells cells_x cells_y/};
-   #if (no x or y) {
-      # do what? do + dimensions even need to be constrained?
-      # should x and y be derivable from specified number of $cells?
-   #}
-   die 'inadequate dimension info' unless $cell_size and $w and $h;
+   my ($cell_size, $w, $h, $x, $y, $cells, $cells_x, $cells_y) 
+      = @{$hash}{qw/cell_size w h x y cells cells_x cells_y/};
+   die 'where?' unless defined $y and defined $x;
+   die 'require cell_size' unless $cell_size;
+   
+   if ($cells) {
+      $w = $cell_size * $cells_x;
+      $h = $cell_size * $cells_y;
+   }
+   else{
+      if ($cells_x) {
+         $w = $cell_size * $cells_x;
+      }
+      if ($cells_y){
+         $h = $cell_size * $cells_y;
+      }
+   }
+   die 'require some form of w and h' unless $w and $h;
    
    return Collision::2D::Entity::Grid->new (
       x=>$x,
@@ -143,7 +186,7 @@ q|positively|
 __END__
 =head1 NAME
 
-Collision::2D - A selection of continuous collision detection routines
+Collision::2D - Continuous 2d collision detection
 
 =head1 SYNOPSIS
 
@@ -215,6 +258,14 @@ By default, the interval is 1.
  #$collision->time == 1. More on that in L<Collision::2D::Collision>.
  #$collision->axis ~~ [0,1] or [0,-1]. More on that in L<Collision::2D::Collision>.
 
+=item intersection
+
+ print 'whoops' unless intersection ($table, $pie);
+
+Detects overlap between 2 entities. This is similar to dynamic_collision,
+except that time and motion is not considered. intersection() does not return a
+L<Collision::2D::Collision>, but instead true or false values.
+
 =item hash2circle, hash2point, hash2rect
 
  my $circle = hash2circle ({x=>0, y=>0, yv => 1, radius => 1});
@@ -252,7 +303,6 @@ define function names or use the :all tag.
 
  *point-point collisions? Don't expect much if you try it now.
  *either triangles or line segments (or both!) to model slopes.
- *Collision::2D::Entity::Grid. Because terrain is often on a grid.
  *Something that can model walking on mario-style platformers.
  **maybe entities should be linked to whatever entities they stand/walk on?
  **How should entities fit into 'gaps' in the floor that are their exact size?
@@ -262,6 +312,8 @@ define function names or use the :all tag.
 Zach P. Morgan, C<< <zpmorgan at cpan.org> >>
 
 Stefan Petrea C<< <stefan.petrea@gmail.com> >>
+
+Kartik Thakore C<< <kthakore@cpan.org> >>
 
 
 =head1 ACKNOWLEDGEMENTS

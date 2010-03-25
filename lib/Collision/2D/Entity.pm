@@ -1,55 +1,11 @@
 package Collision::2D::Entity;
-use Mouse;
+use strict;
+use warnings;
 
-use overload '""'  => sub{'entity'};
+require DynaLoader;
+our @ISA = qw(DynaLoader);
+bootstrap Collision::2D::Entity;
 
-has 'x' => (
-   isa => 'Num',
-   is => 'ro',
-   #required => 1,
-);
-has 'y' => (
-   isa => 'Num',
-   is => 'ro',
-   #required => 1,
-);
-
-has 'xv' => (
-   isa => 'Num',
-   is => 'ro',
-   default => 0,
-);
-has 'yv' => (
-   isa => 'Num',
-   is => 'ro',
-   default => 0,
-);
-
-has 'relative_x' => (
-   isa => 'Num',
-   is => 'rw',
-);
-has 'relative_y' => (
-   isa => 'Num',
-   is => 'rw',
-);
-
-has 'relative_xv' => (
-   isa => 'Num',
-   is => 'rw',
-);
-has 'relative_yv' => (
-   isa => 'Num',
-   is => 'rw',
-);
-
-sub normalize{
-   my ($self, $other) = @_;
-   $self->relative_x ($self->x - $other->x);
-   $self->relative_y ($self->y - $other->y);
-   $self->relative_xv ($self->xv - $other->xv);
-   $self->relative_yv ($self->yv - $other->yv);
-}
 
 #an actual collision at t=0; 
 sub null_collision{
@@ -62,8 +18,21 @@ sub null_collision{
    );
 }
 
-no Mouse;
-__PACKAGE__->meta->make_immutable;
+sub intersect{
+   my ($self, @others) = @_;
+   for (@others){
+      return 1 if Collision::2D::intersection ($self, $_);
+   }
+   return 0;
+}
+
+sub collide{
+   my ($self, $other, %params) = @_;
+   $params{keep_order} = 1;
+   return Collision::2D::dynamic_collision ($self, $other, %params);
+}
+
+sub new{die}
 1
 
 __END__
@@ -85,10 +54,12 @@ L<dynamic_collision|Collision::2D/dynamic_collision>
 
 =head2 relative_x, relative_y, relative_xv, relative_yv
 
+You shouldn't worry about these. Move along now.
+
 Relative position and velocity in space.
 these are necessary if you want to do collisions directly through entity methods,
 
- $circ1->collide_circle($circ2);
+ $circ1->_collide_circle($circ2);
 
 In this case, both the absolute and relative position and velocity of $circ2
 is not used. The relative attributes of $circ1 are assumed to be relative to $circ2.
@@ -96,9 +67,41 @@ is not used. The relative attributes of $circ1 are assumed to be relative to $ci
 
 =head1 METHODS
 
+=head2 collide
+
+ my $collision = $self->collide ($other_entity, interval=>4);
+
+Detect collision with another entity. $self must be normalized to $other.
+Takes interval as a parameter. Returns a collision if there is a collision.
+Returns undef if there is no collision.
+
+With the collide method, the entity order is preserved.
+Consider this example:
+
+ my $collision1 = $panel->collide($droplet);
+ my $collision2 = $droplet->collide($panel);
+
+If these objects collide, then its C<$collision1->ent1> will be C<$panel>, and
+C<$collision2->ent1> will be C<$droplet>.
+
+=head2 intersect
+
+ my $t_or_f = $self->intersect ($other_entity);
+
+Detect intersection (overlapping) with another entity.
+Takes interval as a parameter. Returns a collision if there is a collision.
+Returns undef if there is no collision.
+
+Relative vectors and velocity are not considered for intersection.
+
 =head2 normalize
 
+You probably shouldn't use this directly. At all. 
+Relative vectors are handled automatically
+in C<dynamic_collision> and in  C<$ent1->collide($ent2)>
+
  $self->normalize($other); # $other isa entity
+
 This compares the absolute attributes of $self and $other.
 It only sets the relative attributes of $self.
-This is necessary to call collide_*($other) methods on $self.
+This is necessary to call _collide_*($other) methods on $self.

@@ -1,42 +1,84 @@
 package Collision::2D::Entity::Circle;
-use Mouse;
-use Collision::2D::Entity::Rect;
-extends 'Collision::2D::Entity';
+use strict;
+use warnings;
 
-use overload '""'  => sub{'circle'};
+require DynaLoader;
+our @ISA = qw(DynaLoader Collision::2D::Entity);
+bootstrap Collision::2D::Entity::Circle;
 
 #in a circle, x and y denote center. 
 
-has 'radius' => (
-   is => 'ro',
-   isa => 'Num',
-   default => 1,
-);
+sub _p{2} #highish priority
+use overload '""'  => sub{'circle'};
 
 
+sub new{
+   my ($package, %params) = @_;
+   my $self = __PACKAGE__->_new (
+      $params{x} || 0,
+      $params{y} || 0,
+      $params{xv} || 0,
+      $params{yv} || 0,
+      $params{relative_x} || 0,
+      $params{relative_y} || 0,
+      $params{relative_xv} || 0,
+      $params{relative_yv} || 0,
+      $params{radius},
+   );
+   return $self;
+}
 
 
-# formulas are the same as before with small modifs
-sub intersects_circle{
+sub intersect_circle{
    my ($self, $other) = @_;
 
    #sqrt is more expensive than square
    return  ($self->radius + $other->radius)**2 > 
-		   ($self->x - $other->x)**2 + 
-		   ($self->y - $other->y)**2;
+         ($self->x - $other->x)**2 + 
+         ($self->y - $other->y)**2;
 }
 
 
-sub intersects_point{
+sub intersect_point{
    my ($self, $point) = @_;
-
    return   $self->radius**2 >
-		   ($self->x - $point->x)**2 + 
-		   ($self->y - $point->y)**2;
+         ($self->x - $point->x)**2 + 
+         ($self->y - $point->y)**2;
 }
 
+#both stationary
+sub intersect_rect{
+   my ($self, $rect) = @_;
+   my $r = $self->radius;
+   my $w = $rect->w;
+   my $h = $rect->h;
+   my $x = $self->x - $rect->x; #of self, relative to rect!
+   my $y = $self->y - $rect->y; #of self, relative to rect!
+   
+   
+   if   ($x-$r > $w
+      or $y-$r > $h
+      or $x+$r < 0
+      or $y+$r < 0){
+         #warn "$x $y   w: $w, h: $h, r: $r";
+         return 0
+   }
+   return 1 if ($x**2 + $y**2) < $r**2;
+   return 1 if (($x-$w)**2 + $y**2) < $r**2;
+   return 1 if (($x-$w)**2 + ($y-$h)**2) < $r**2;
+   return 1 if ($x**2 + ($y-$h)**2) < $r**2;
+   #detect 'imposition', whereall corner+side points are outside the other entity
+   return 1 if (($x-$w/2)**2 + ($y-$h/2)**2) < $r**2;
+   
+   for ([$x,$y-$r], [$x-$r,$y], [$x,$y+$r], [$x+$r,$y]){
+      my ($x,$y) = @$_;
+      return 1 if $x>0 and $y>0
+              and $x<$w and $y<$h;
+   }
+   return 0;
+}
 
-sub collide_rect{
+sub _collide_rect{
    my ($self, $rect, %params) = @_;
    my @collisions;
    
@@ -64,6 +106,9 @@ sub collide_rect{
    if ($y1+$h < -$r and $y2+$h < -$r){
       return
    }
+   if (($x1+$w/2)**2 + ($y1+$h/2)**2 < $r**2) { #imposition?
+      return $self->null_collision($rect);
+   }
    
    #which of rect's 4 points should I consider?
  #  my @start_pts = ([$x1, $y1], [$x1+$w, $y1], [$x1+$w, $y1+$h], [$x1, $y1+$h]);
@@ -82,14 +127,8 @@ sub collide_rect{
    );
    @pts = sort {$a->{dist} <=> $b->{dist}} @pts;
    #now detect null collision of closest rect corner
-   #warn %{$pts[0]};
    if (0 and $pts[0]{dist} < $r){
-      return Collision::2D::Collision->new(
-       #  axis => $collision->axis,
-         time => 0,
-         ent1 => $self,
-         ent2 => $rect,
-      );
+      return $self->null_collision($rect)
    }
    for (@pts[0,1,2]){ #do this for 3 initially closest rect corners
       my $new_relative_circle = Collision::2D::Entity::Circle->new(
@@ -100,7 +139,7 @@ sub collide_rect{
          relative_yv => -$self->relative_yv,
          radius => $self->radius,
       );
-      my $collision = $new_relative_circle->collide_point ($origin_point, interval=>$params{interval});
+      my $collision = $new_relative_circle->_collide_point ($origin_point, interval=>$params{interval});
       next unless $collision;
       #$_->{collision} = 
       push @collisions, Collision::2D::Collision->new(
@@ -111,8 +150,9 @@ sub collide_rect{
       );
    }
    #return unless @collisions;
-   @collisions = sort {$a->time <=> $b->time} @collisions;
-   return $collisions[0] if defined $collisions[0];
+   #@collisions = sort {$a->time <=> $b->time} @collisions;
+   #return $collisions[0] if defined $collisions[0];
+   
    # that looked at the rect corners. that was half of it. 
    # now look for collisions between a side of the circle
    #  and a side of the rect
@@ -140,7 +180,7 @@ sub collide_rect{
          relative_xv => $self->relative_xv,
          relative_yv => $self->relative_yv,
       );
-      my $collision = $rpt->collide_rect($rect, interval=>$params{interval});
+      my $collision = $rpt->_collide_rect($rect, interval=>$params{interval});
       next unless $collision;
       push @collisions, new Collision::2D::Collision(
          time => $collision->time,
@@ -171,12 +211,8 @@ sub collide_rect{
 # roots (where circle intersects on the x axis) are at
 # ( -B ± sqrt(B**2 - 4AC) ) / 2A
 #Then, see which intercept, if any, is the closest after starting point
-sub collide_point{
+sub _collide_point{
    my ($self, $point, %params) = @_;
-   #my $r = $self->radius;
-   #if ($self->intersects_point($point)){
-   #   return $self->null_collision($point);
-   #}
    #x1,etc. is the path of the point, relative to $self.
    #it's probably easier to consider the point as stationary.
    my $x1 = -$self->relative_x;
@@ -184,7 +220,7 @@ sub collide_point{
    my $x2 = $x1 - $self->relative_xv * $params{interval};
    my $y2 = $y1 - $self->relative_yv * $params{interval};
    
-   if (sqrt($x1**2 + $y1**2) < $self->radius) {
+   if (($x1**2 + $y1**2) < $self->radius**2) {
       return $self->null_collision($point);
    }
    
@@ -203,18 +239,11 @@ sub collide_point{
    my $B = 2 * $slope*$y_intercept;
    my $C = $y_intercept**2 - $self->radius**2;
    my @xi; #x component of intersections.
-   if ($A==0){ #true quadratic equation would divide by 0.
-      #Bx+C=0 so x=C/B
-      return if $B==0; #not sure if this seems right.
-      push @xi, ($C/$B)
-   }
-   else{
-      my $blah = $B**2 - 4*$A*$C;
-      return unless $blah>0;
-      $blah = sqrt($blah);
-      push @xi, (-$B + $blah ) / (2*$A);
-      push @xi, (-$B - $blah ) / (2*$A);
-   }
+   my $blah = $B**2 - 4*$A*$C;
+   return unless $blah>0;
+   $blah = sqrt($blah);
+   push @xi, (-$B + $blah ) / (2*$A);
+   push @xi, (-$B - $blah ) / (2*$A);
    #keep intersections within segment
    @xi = grep {($_>=$x1 and $_<=$x2) or ($_<=$x1 and $_>=$x2)} @xi;
    #sort based on closeness to starting point.
@@ -236,7 +265,7 @@ sub collide_point{
 }
 
 #Say, can't we just use the point algorithm by transferring the radius of one circle to the other?
-sub collide_circle{
+sub _collide_circle{
    my ($self, $other, %params) = @_;
    my $double_trouble = Collision::2D::Entity::Circle->new(
       relative_x => $self->relative_x,
@@ -250,7 +279,7 @@ sub collide_circle{
    my $pt = Collision::2D::Entity::Point->new(
       #y=>44,x=>44, #these willn't be used, as we're doing all relative calculations
    );
-   my $collision = $double_trouble->collide_point($pt, %params);
+   my $collision = $double_trouble->_collide_point($pt, %params);
    return unless $collision;
    
    return Collision::2D::Collision->new(
@@ -261,92 +290,6 @@ sub collide_circle{
       #axis => [-$collision->axis->[0], -$collision->axis->[1]],
    );
 }
-
-
-=for comment collide_grid(Collision::2D::Entity::Grid)
-
-Returns earliest collision with some entity on the grid.
-
-=cut
-
-
-sub collide_grid {
-	my ($self,$g) = @_;
-
-	my (@collisions);
-
-	my $r = $self->radius;
-
-
-	my $table = $g->table;
-	my $s     = $g->cell_size;
-
-	for my $x ( (-$r + $self->x) .. ($r + $self->x) ) {
-		for my $y ( (-$r + $self->y) .. ($r + $self->y) ) {
-			my $x1 = $x - $self->x;
-			my $y1 = $y - $self->y;
-			next if ($x1**2) + ($y1**2) > $r**2;
-
-			if($table->[$y/$s]->[$x/$s]) {
-				# we have something in the grid cell
-				
-				for my $entity_inside_cell ( @{$table->[$y/$s]->[$x/$s]} ) {
-					push @collisions,$self->collide_rect( $entity_inside_cell );
-				};
-
-			}
-
-		}
-	};
-
-
-	return 
-	(
-		sort { $a->time < $b->time }
-		@collisions
-	)[0]; # the earliest collision
-}
-
-
-=for comment write_to_grid()
-
-Pushes the circle into the cells of the grid which cover it.
-
-=cut
-
-sub write_to_grid {
-	my ($self, $grid) = @_;
-
-	#must find a faster way to find points inside
-	
-	my $r = $self->radius;
-	my $s = $grid->cell_size;
-	for my $x ( (-$r + $self->x) .. ($r + $self->x) ) {
-		for my $y ( (-$r + $self->y) .. ($r + $self->y) ) {
-			my $x1 = $x - $self->x;
-			my $y1 = $y - $self->y;
-			next if ($x1**2) + ($y1**2) > $r**2;
-			# printf("%d,%d,%d\n",$x1**2,$y1**2,$r**2);
-			#
-			# should actually insert $self in that cell, but for debug, we see if it fills correctly
-			#
-			# these divisions can be avoided
-
-			push	@{$grid->table->[$y/$s][$x/$s]}, 
-			    	 $self;
-		}
-	}
-}
-
-
-sub remove_from_grid {
-	#to be implemented
-}
-
-
-
-no Mouse;
-__PACKAGE__->meta->make_immutable;
 
 1
 
@@ -368,23 +311,22 @@ Each point on the circle is this distance from the center, at C<< ($circ->x, $ci
 
 =head1 METHODS
 
-In any of these collide_* methods, relative coordinates must be set. See L<Entity|Collision::2D::Entity> for more info.
+Anything in L<Collision::2D::Entity>.
 
-=head2 collide_point
+=head2 collide
 
- $self->normalize ($pt);
- $self->collide_point($pt, interval=>1);
+See L<Collision::2D::Entity->collide($v)|Collision::2D::Entity/collide>
 
-=head2 collide_circle
+ print 'boom' if $circle->collide($rect);
+ print 'zing' if $circle->collide($circle);
+ print 'yotz' if $circle->collide($grid);
+ 
+=head2 intersect
 
- $self->normalize ($circ);
- $self->collide_circle($circ, interval=>1);
+See L<Collision::2D::Entity->intersect($v)|Collision::2D::Entity/intersect>
 
-=head2 collide_rect
-
- $self->normalize ($rect);
- $self->collide_rect($rect, interval=>1);
-
+ print 'bam' if $circle->intersect($rect);
+ # etc..
 
 
 

@@ -1,4 +1,4 @@
-Revision history for Collision-Dynamic
+Revision history for Collision::2D
 
 0.01    Date/time
         First version, released on an unsuspecting world.
@@ -8,5 +8,8 @@ Revision history for Collision-Dynamic
         Lots of circle-rect bugfixes, bounce vectors, & the marble demo
 0.04    Mar 11, 2010
         File::Slurp dependancy was making fail. Taking out grid for 0.04. (It does nothing atm)
-        
-
+0.05    Mar 25, 2010
+        Collision::Grid added,
+        Mouse taken away,
+        moving to an XS struct backend, 
+        normalize and vaxis ported to xs.

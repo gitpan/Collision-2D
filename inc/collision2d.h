@@ -1,5 +1,15 @@
 
-#define ENT_STUFF \
+#include "EXTERN.h"
+#include "perl.h"
+#include "XSUB.h"
+
+#ifndef aTHX_
+#define aTHX_
+#endif
+
+
+#define ENTITY_AS(ENT_TYPE) \
+typedef struct ENT_TYPE{ \
    float x, y; \
    float xv, yv;\
    float relative_x, relative_y;\
@@ -8,32 +18,14 @@
    float h,w; \
    AV* table; \
    int cells_x, cells_y; \
-   float cell_size; 
+   float cell_size; \
+} ENT_TYPE;
 
-typedef struct Entity{
-   ENT_STUFF
-} Entity;
-
-typedef struct Point{
-   ENT_STUFF
-} Point;
-
-typedef struct Circle{
-   ENT_STUFF
- //  float radius;
-} Circle;
-
-typedef struct Rect{
-   ENT_STUFF
- //  float h,w;
-} Rect;
-typedef struct Grid{
-   ENT_STUFF
- //  AV* table;
- //  float h,w;
- //  int cells_x, cells_y;
- //  float cell_size;
-} Grid;
+ENTITY_AS(Entity)
+ENTITY_AS(Circle)
+ENTITY_AS(Point)
+ENTITY_AS(Rect)
+ENTITY_AS(Grid)
 
 
 

@@ -38,12 +38,15 @@ sub bounce_vector{
    }
    
    my $axis_len = sqrt($axis->[0]**2 + $axis->[1]**2);
-   my $rxv = $self->ent1->relative_xv;
-   my $ryv = $self->ent1->relative_yv;
+   my $rxv = $self->ent1->xv - $self->ent2->xv;
+   my $ryv = $self->ent1->yv - $self->ent2->yv;
    my $rv_len = sqrt($rxv**2 + $ryv**2);
    my $dot = $rxv*$axis->[0] + $ryv*$axis->[1];
- #  warn $rv_len;
-   return [0,0] unless $rv_len;
+   unless ($rv_len){
+      #warn "FOO FOO ". $self->time;
+      #warn $rv_len;
+      return [0,0];
+   }
    my $angle = acos($dot / ($axis_len * $rv_len));
    
    my $axis_scalar = $rv_len * cos($angle) / $axis_len;
@@ -109,7 +112,7 @@ is provided for that purpose.
 
 =item vaxis
 
-Again, the axis of collision. If you call this, it will always return the mathematical
+Again, the axis of collision. If you call this, it will always return the vector
 form [$x,$y]. If the axis existed as 'x' or 'y', it is translated to [$x,$y].
 
 This vector will not be normal (normal means of length 1).
@@ -121,7 +124,9 @@ is provided for that purpose.
  $collision->ent1
 
 This is to provide some context for L</axis>. This is useful because
-dynamic_collision doesn't preserve the order of your entities.
+dynamic_collision doesn't preserve the order of your entities. If you would
+like for the order to be preserved, use the C<< entity->collide($ent2) >> method,
+or use the keep_order parameter in C<dynamic_collision>.
 
 =back
 
@@ -130,6 +135,11 @@ dynamic_collision doesn't preserve the order of your entities.
 =over
 
 =item bounce_vector
+
+ my $bouncevec = $co->bounce_vector (elasticity => .8);
+
+Assuming that C<< $co->ent2 >> has infinite mass, the C<< $co->bounce_vector >> is
+the resulting velocity of C<< $co->ent1 >>. The elasticity parameter is 1 by default.
 
 =item invert
 

@@ -9,6 +9,7 @@ bootstrap Collision::2D::Entity::Point;
 
 sub _p{3} #meh priority
 use overload '""'  => sub{'point'};
+sub typename{'point'}
 
 sub new{
    my ($package, %params) = @_;
@@ -145,7 +146,7 @@ sub _collide_rect{
 __END__
 =head1 NAME
 
-Collision::2D::Entity::Rect - A rectangle entity.
+Collision::2D::Entity::Rect - A Point entity.
 
 =head1 DESCRIPTION
 
